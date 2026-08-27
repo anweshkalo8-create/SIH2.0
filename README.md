@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # OceanVerse — Interactive Ocean Model & Observation Visualization Platform
 
 > **Smart India Hackathon (SIH)**  
@@ -95,3 +96,7 @@ By swapping `mockOceanService.ts` with real API calls, the frontend seamlessly c
 ## 📄 License & Disclaimer
 
 *This prototype is built for demonstration and hackathon evaluation. Synthetic data is used for visualization demonstration unless connected to live INCOIS data services.*
+=======
+# SIH2.0
+OceanVerse
+>>>>>>> 98c249dcdca6720b07d8c9755f4d3e4e51ce4cfc
