@@ -1,65 +1,155 @@
-"""
-/api/users — Registration, login (JWT), saved views.
-"""
+from typing import Dict, List
+from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Depends
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from models.schemas import UserCreate, Token, SavedView
-from typing import List
+from fastapi import APIRouter, HTTPException, status
 
-router = APIRouter()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/users/login")
+from models.schemas import SavedView, Token, UserCreate, UserResponse
 
 
-@router.post("/register", status_code=201)
-def register(user: UserCreate):
+router = APIRouter(prefix="/users", tags=["users"])
+
+
+# Development-only in-memory storage.
+# Replace with a database before production deployment.
+
+USERS: Dict[str, dict] = {}
+SAVED_VIEWS: Dict[str, List[SavedView]] = {}
+
+
+@router.post(
+    "/register",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def register_user(payload: UserCreate):
     """
-    Create a new user account.
-    TODO: check email uniqueness, hash password with bcrypt, insert to DB
+    Register a development user.
+
+    Password storage must be replaced with a secure password
+    hashing/database implementation before production.
     """
-    return {"message": "Account created. Please verify your email."}
+
+    existing_user = next(
+        (
+            user
+            for user in USERS.values()
+            if user["email"].lower() == payload.email.lower()
+        ),
+        None,
+    )
+
+    if existing_user:
+        raise HTTPException(
+            status_code=409,
+            detail="A user with this email already exists",
+        )
+
+    user_id = str(uuid4())
+
+    USERS[user_id] = {
+        "id": user_id,
+        "email": payload.email,
+        "name": payload.name,
+        "organization": payload.organization,
+        "password": payload.password,
+    }
+
+    SAVED_VIEWS[user_id] = []
+
+    return UserResponse(
+        id=user_id,
+        email=payload.email,
+        name=payload.name,
+        organization=payload.organization,
+    )
 
 
 @router.post("/login", response_model=Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends()):
+def login_user(payload: UserCreate):
     """
-    Authenticate with email + password, return a signed JWT.
-    TODO: verify credentials, sign JWT with SECRET_KEY from .env
+    Development login endpoint.
+
+    Replace with JWT + password hashing for production.
     """
-    raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    user = next(
+        (
+            user
+            for user in USERS.values()
+            if user["email"].lower() == payload.email.lower()
+        ),
+        None,
+    )
+
+    if user is None or user["password"] != payload.password:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid email or password",
+        )
+
+    return Token(
+        access_token=user["id"],
+        token_type="bearer",
+    )
 
 
-@router.post("/refresh", response_model=Token)
-def refresh_token(token: str = Depends(oauth2_scheme)):
-    """Issue a new JWT given a still-valid token."""
-    raise HTTPException(status_code=401, detail="Token invalid or expired")
-
-
-@router.get("/me")
-def get_profile(token: str = Depends(oauth2_scheme)):
-    """Return the authenticated user's profile."""
-    return {}
-
-
-@router.get("/me/views", response_model=List[SavedView])
-def list_saved_views(token: str = Depends(oauth2_scheme)):
-    """All saved map views for the current user."""
-    return []
-
-
-@router.post("/me/views", response_model=SavedView, status_code=201)
-def save_view(view: SavedView, token: str = Depends(oauth2_scheme)):
+@router.get("/me", response_model=UserResponse)
+def get_current_user(user_id: str):
     """
-    Save a named map view (lat, lon, zoom, depth, variable).
-    TODO: insert to DB with user_id from decoded JWT
+    Return a development user by ID.
+
+    Production version should read the user from a validated JWT.
     """
+
+    user = USERS.get(user_id)
+
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
+
+    return UserResponse(
+        id=user["id"],
+        email=user["email"],
+        name=user["name"],
+        organization=user["organization"],
+    )
+
+
+@router.get(
+    "/{user_id}/views",
+    response_model=List[SavedView],
+)
+def list_saved_views(user_id: str):
+    if user_id not in USERS:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
+
+    return SAVED_VIEWS.get(user_id, [])
+
+
+@router.post(
+    "/{user_id}/views",
+    response_model=SavedView,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_saved_view(
+    user_id: str,
+    payload: SavedView,
+):
+    if user_id not in USERS:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
+
+    view = payload.model_copy(
+        update={"view_id": str(uuid4())}
+    )
+
+    SAVED_VIEWS.setdefault(user_id, []).append(view)
+
     return view
-
-
-@router.delete("/me/views/{view_id}", status_code=204)
-def delete_view(view_id: str, token: str = Depends(oauth2_scheme)):
-    """
-    Delete a saved view.
-    TODO: DB delete with ownership check
-    """
-    return
