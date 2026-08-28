@@ -3,10 +3,18 @@ from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
-from models.schemas import Observation, ObservationType, ProfilePoint, StatsResponse
+from models.schemas import (
+    Observation,
+    ObservationType,
+    ProfilePoint,
+    StatsResponse,
+)
 
 
-router = APIRouter(prefix="/observations", tags=["observations"])
+router = APIRouter(
+    prefix="/observations",
+    tags=["observations"],
+)
 
 
 # ── Demo observation data ──────────────────────────────────────────────────────
@@ -15,13 +23,16 @@ router = APIRouter(prefix="/observations", tags=["observations"])
 
 NOW = datetime.now(timezone.utc)
 
+
 OBSERVATIONS: List[Observation] = [
     Observation(
         id="ARGO-001",
         type=ObservationType.ARGO,
         latitude=15.20,
         longitude=72.80,
-        timestamp=NOW - timedelta(hours=2),
+        timestamp=(
+            NOW - timedelta(hours=2)
+        ).isoformat(),
         depth=100.0,
         temperature=27.4,
         salinity=35.2,
@@ -33,7 +44,9 @@ OBSERVATIONS: List[Observation] = [
         type=ObservationType.ARGO,
         latitude=13.50,
         longitude=74.10,
-        timestamp=NOW - timedelta(hours=5),
+        timestamp=(
+            NOW - timedelta(hours=5)
+        ).isoformat(),
         depth=150.0,
         temperature=26.8,
         salinity=35.5,
@@ -45,7 +58,9 @@ OBSERVATIONS: List[Observation] = [
         type=ObservationType.GLIDER,
         latitude=17.10,
         longitude=71.60,
-        timestamp=NOW - timedelta(hours=8),
+        timestamp=(
+            NOW - timedelta(hours=8)
+        ).isoformat(),
         depth=80.0,
         temperature=28.1,
         salinity=34.9,
@@ -57,13 +72,20 @@ OBSERVATIONS: List[Observation] = [
 
 # ── List observations ──────────────────────────────────────────────────────────
 
-@router.get("", response_model=List[Observation])
+@router.get(
+    "",
+    response_model=List[Observation],
+)
 def list_observations(
     observation_type: Optional[ObservationType] = Query(
         default=None,
         alias="type",
     ),
-    limit: int = Query(default=100, ge=1, le=1000),
+    limit: int = Query(
+        default=100,
+        ge=1,
+        le=1000,
+    ),
 ):
     """
     Return available ocean observations.
@@ -71,13 +93,15 @@ def list_observations(
     Optional filtering:
     - type=argo
     - type=glider
+    - type=buoy
     """
-    results = OBSERVATIONS
 
-    if observation_type is not None:
+    if observation_type is None:
+        results = OBSERVATIONS
+    else:
         results = [
             observation
-            for observation in results
+            for observation in OBSERVATIONS
             if observation.type == observation_type
         ]
 
@@ -85,14 +109,21 @@ def list_observations(
 
 
 # ── Observation statistics ─────────────────────────────────────────────────────
-# IMPORTANT: This route appears before /{observation_id}
-# so "stats" is not interpreted as an observation ID.
+# Keep this route before /{observation_id} so that
+# "stats" is not interpreted as an observation ID.
 
-@router.get("/stats/summary", response_model=StatsResponse)
+@router.get(
+    "/stats/summary",
+    response_model=StatsResponse,
+)
 def observation_stats():
     """
     Return summary statistics for the available observations.
+
+    These are demonstration statistics until the
+    observation/model comparison pipeline is connected.
     """
+
     if not OBSERVATIONS:
         return StatsResponse(
             rmse=0.0,
@@ -100,7 +131,6 @@ def observation_stats():
             count=0,
         )
 
-    # Demo statistics until model-observation comparison is connected.
     return StatsResponse(
         rmse=0.38,
         meanError=0.12,
@@ -114,10 +144,14 @@ def observation_stats():
     "/{observation_id}/profile",
     response_model=List[ProfilePoint],
 )
-def get_observation_profile(observation_id: str):
+def get_observation_profile(
+    observation_id: str,
+):
     """
-    Return a simple vertical profile for an observation.
+    Return a demonstration vertical profile
+    for a specific observation.
     """
+
     observation = next(
         (
             item
@@ -130,28 +164,72 @@ def get_observation_profile(observation_id: str):
     if observation is None:
         raise HTTPException(
             status_code=404,
-            detail=f"Observation '{observation_id}' not found",
+            detail=(
+                f"Observation "
+                f"'{observation_id}' not found"
+            ),
         )
+
 
     base_temperature = observation.temperature
     base_salinity = observation.salinity
     base_chlorophyll = observation.chlorophyll
 
-    depths = [0.0, 50.0, 100.0, 200.0, 500.0]
 
-    return [
-        ProfilePoint(
-            depth=depth,
-            temperature=round(base_temperature - depth * 0.008, 2),
-            salinity=round(base_salinity + depth * 0.0008, 2),
-            chlorophyll=round(
-                max(0.02, base_chlorophyll - depth * 0.0005),
-                3,
-            ),
-        )
-        for depth in depths
-        if depth <= observation.maxDepth
+    depths = [
+        0.0,
+        50.0,
+        100.0,
+        200.0,
+        500.0,
     ]
+
+
+    profile: List[ProfilePoint] = []
+
+    for depth in depths:
+
+        if depth > observation.maxDepth:
+            continue
+
+        temperature = max(
+            0.0,
+            base_temperature -
+            depth * 0.008,
+        )
+
+        salinity = (
+            base_salinity +
+            depth * 0.0008
+        )
+
+        chlorophyll = max(
+            0.02,
+            base_chlorophyll -
+            depth * 0.0005,
+        )
+
+
+        profile.append(
+            ProfilePoint(
+                depth=depth,
+                temperature=round(
+                    temperature,
+                    2,
+                ),
+                salinity=round(
+                    salinity,
+                    2,
+                ),
+                chlorophyll=round(
+                    chlorophyll,
+                    3,
+                ),
+            )
+        )
+
+
+    return profile
 
 
 # ── Single observation ─────────────────────────────────────────────────────────
@@ -160,10 +238,13 @@ def get_observation_profile(observation_id: str):
     "/{observation_id}",
     response_model=Observation,
 )
-def get_observation(observation_id: str):
+def get_observation(
+    observation_id: str,
+):
     """
     Return one observation by ID.
     """
+
     observation = next(
         (
             item
@@ -176,7 +257,10 @@ def get_observation(observation_id: str):
     if observation is None:
         raise HTTPException(
             status_code=404,
-            detail=f"Observation '{observation_id}' not found",
+            detail=(
+                f"Observation "
+                f"'{observation_id}' not found"
+            ),
         )
 
     return observation
