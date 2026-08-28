@@ -10,8 +10,13 @@ from fastapi.responses import StreamingResponse
 from models.schemas import ExportRequest, ExportStatus
 
 
-router = APIRouter(prefix="/export", tags=["export"])
+router = APIRouter(
+    prefix="/export",
+    tags=["export"],
+)
 
+
+# ── Development-only export storage ──────────────────────────────────────────
 
 EXPORT_JOBS: Dict[str, dict] = {}
 
@@ -22,15 +27,20 @@ SUPPORTED_FORMATS = {
 }
 
 
+# ── Create export ─────────────────────────────────────────────────────────────
+
 @router.post(
     "",
     response_model=ExportStatus,
 )
-def create_export(payload: ExportRequest):
+def create_export(
+    payload: ExportRequest,
+):
     """
     Create an export job.
 
-    CSV and JSON are supported in this development implementation.
+    CSV and JSON are supported in this development
+    implementation.
     """
 
     export_format = payload.format.lower()
@@ -39,9 +49,17 @@ def create_export(payload: ExportRequest):
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Unsupported export format '{payload.format}'. "
-                f"Supported formats: {sorted(SUPPORTED_FORMATS)}"
+                f"Unsupported export format "
+                f"'{payload.format}'. "
+                f"Supported formats: "
+                f"{sorted(SUPPORTED_FORMATS)}"
             ),
+        )
+
+    if not payload.ids:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one ID is required for export",
         )
 
     job_id = str(uuid4())
@@ -49,22 +67,35 @@ def create_export(payload: ExportRequest):
     EXPORT_JOBS[job_id] = {
         "status": "completed",
         "progress_pct": 100,
-        "request": payload.model_dump(mode="json"),
+        "request": payload.model_dump(
+            mode="json"
+        ),
     }
 
     return ExportStatus(
         job_id=job_id,
         status="completed",
         progress_pct=100,
-        download_url=f"/api/export/{job_id}/download",
+        download_url=(
+            f"/api/export/"
+            f"{job_id}/download"
+        ),
     )
 
+
+# ── Export status ────────────────────────────────────────────────────────────
 
 @router.get(
     "/{job_id}",
     response_model=ExportStatus,
 )
-def get_export_status(job_id: str):
+def get_export_status(
+    job_id: str,
+):
+    """
+    Return the current status of an export job.
+    """
+
     job = EXPORT_JOBS.get(job_id)
 
     if job is None:
@@ -77,12 +108,25 @@ def get_export_status(job_id: str):
         job_id=job_id,
         status=job["status"],
         progress_pct=job["progress_pct"],
-        download_url=f"/api/export/{job_id}/download",
+        download_url=(
+            f"/api/export/"
+            f"{job_id}/download"
+        ),
     )
 
 
-@router.get("/{job_id}/download")
-def download_export(job_id: str):
+# ── Download export ──────────────────────────────────────────────────────────
+
+@router.get(
+    "/{job_id}/download"
+)
+def download_export(
+    job_id: str,
+):
+    """
+    Download a completed export.
+    """
+
     job = EXPORT_JOBS.get(job_id)
 
     if job is None:
@@ -108,38 +152,62 @@ def download_export(job_id: str):
         for item_id in request_data["ids"]
     ]
 
+
+    # ── JSON export ───────────────────────────────────────────────────────────
+
     if export_format == "json":
+
         content = json.dumps(
             rows,
             indent=2,
         )
 
         return StreamingResponse(
-            io.BytesIO(content.encode("utf-8")),
+            io.BytesIO(
+                content.encode("utf-8")
+            ),
             media_type="application/json",
             headers={
                 "Content-Disposition": (
-                    f'attachment; filename="{job_id}.json"'
+                    f'attachment; '
+                    f'filename="{job_id}.json"'
                 )
             },
         )
 
-    output = io.StringIO()
 
-    writer = csv.DictWriter(
-        output,
-        fieldnames=["id", "data_type"],
-    )
+    # ── CSV export ────────────────────────────────────────────────────────────
 
-    writer.writeheader()
-    writer.writerows(rows)
+    if export_format == "csv":
 
-    return StreamingResponse(
-        io.BytesIO(output.getvalue().encode("utf-8")),
-        media_type="text/csv",
-        headers={
-            "Content-Disposition": (
-                f'attachment; filename="{job_id}.csv"'
-            )
-        },
+        output = io.StringIO()
+
+        writer = csv.DictWriter(
+            output,
+            fieldnames=[
+                "id",
+                "data_type",
+            ],
+        )
+
+        writer.writeheader()
+        writer.writerows(rows)
+
+        return StreamingResponse(
+            io.BytesIO(
+                output.getvalue().encode("utf-8")
+            ),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; '
+                    f'filename="{job_id}.csv"'
+                )
+            },
+        )
+
+
+    raise HTTPException(
+        status_code=400,
+        detail="Unsupported export format",
     )
