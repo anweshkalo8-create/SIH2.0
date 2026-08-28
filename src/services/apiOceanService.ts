@@ -1,83 +1,160 @@
-// apiOceanService.ts
-// Drop-in replacement for mockOceanService.ts — same function names,
-// same signatures, same return types. Only the bodies change.
-//
-// TO SWITCH FROM MOCK → REAL, change ONE line in each component:
-//
-//   // Before:
-//   import { getFieldSlice } from '@/services/mockOceanService'
-//
-//   // After:
-//   import { getFieldSlice } from '@/services/apiOceanService'
+import type {
+  CurrentVector,
+  Observation,
+  OceanVariable,
+  ProfilePoint,
+  Stats,
+} from "../types/ocean";
 
-import type { CurrentVector, Observation, ProfilePoint } from '@/types/ocean';
 
-export interface GridPoint {
-  lat: number; lon: number; depth: number;
-  temperature: number; salinity: number; chlorophyll: number;
-}
-export interface GridSlice { nlats: number; nlons: number; points: GridPoint[]; }
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
 
-const BASE = import.meta.env.VITE_API_URL ?? '/api';
 
-async function apiFetch<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`);
-  if (!res.ok) throw new Error(`API ${res.status}: ${path}`);
-  return res.json() as Promise<T>;
-}
-
-// Replaces: mockOceanService.getFieldSlice
-// Backend:  GET /api/field?variable=temperature&depth=200&time=3
-export async function getFieldSlice(
-  variable: 'temperature' | 'salinity' | 'chlorophyll',
-  depth: number,
-  timeIndex: number,
-): Promise<GridSlice> {
-  return apiFetch<GridSlice>(
-    `/field?variable=${variable}&depth=${depth}&time=${timeIndex}`
+async function request<T>(
+  path: string,
+  options?: RequestInit,
+): Promise<T> {
+  const response = await fetch(
+    `${API_BASE_URL}${path}`,
+    {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(options?.headers ?? {}),
+      },
+    },
   );
-}
 
-// Replaces: mockOceanService.getCurrents
-// Backend:  GET /api/currents?depth=0&time=0&density=medium
-export async function getCurrents(
-  depth: number,
-  timeIndex: number,
-  density: 'low' | 'medium' | 'high' = 'medium',
-): Promise<CurrentVector[]> {
-  return apiFetch<CurrentVector[]>(
-    `/currents?depth=${depth}&time=${timeIndex}&density=${density}`
-  );
-}
+  if (!response.ok) {
+    let message = `API request failed: ${response.status}`;
 
-// Replaces: mockOceanService.getObservations
-// Backend:  GET /api/observations?time=0
-export async function getObservations(timeIndex: number): Promise<Observation[]> {
-  return apiFetch<Observation[]>(`/observations?time=${timeIndex}`);
-}
+    try {
+      const body = await response.json();
 
-// Replaces: mockOceanService.getProfile
-// Backend:  GET /api/profile?id=ARGO-2901&variable=temperature
-export async function getProfile(
-  obsId: string,
-  variable: 'temperature' | 'salinity' | 'chlorophyll',
-): Promise<{ observation: ProfilePoint[]; model: ProfilePoint[] }> {
-  return apiFetch(`/profile?id=${obsId}&variable=${variable}`);
-}
+      if (body?.detail) {
+        message = body.detail;
+      }
+    } catch {
+      // Keep the default error message when the response is not JSON.
+    }
 
-// Pure function — no API call needed, identical to mock version
-export function computeStats(
-  obs: ProfilePoint[],
-  model: ProfilePoint[],
-  variable: 'temperature' | 'salinity' | 'chlorophyll',
-): { rmse: number; meanError: number; count: number } {
-  const n = Math.min(obs.length, model.length);
-  if (n === 0) return { rmse: 0, meanError: 0, count: 0 };
-  let sumSq = 0, sumErr = 0;
-  for (let i = 0; i < n; i++) {
-    const diff = obs[i][variable] - model[i][variable];
-    sumSq += diff * diff;
-    sumErr += diff;
+    throw new Error(message);
   }
-  return { rmse: Math.sqrt(sumSq / n), meanError: sumErr / n, count: n };
+
+  return response.json() as Promise<T>;
 }
+
+
+export interface ObservationFilters {
+  type?: "argo" | "glider";
+  limit?: number;
+}
+
+
+export interface FieldFilters {
+  variable?: OceanVariable;
+  depth?: number;
+}
+
+
+export interface ProfileFilters {
+  latitude: number;
+  longitude: number;
+}
+
+
+export const apiOceanService = {
+  async getObservations(
+    filters: ObservationFilters = {},
+  ): Promise<Observation[]> {
+    const params = new URLSearchParams();
+
+    if (filters.type) {
+      params.set("type", filters.type);
+    }
+
+    if (filters.limit !== undefined) {
+      params.set("limit", String(filters.limit));
+    }
+
+    const query = params.toString();
+
+    return request<Observation[]>(
+      `/observations${query ? `?${query}` : ""}`,
+    );
+  },
+
+
+  async getObservation(
+    observationId: string,
+  ): Promise<Observation> {
+    return request<Observation>(
+      `/observations/${encodeURIComponent(observationId)}`,
+    );
+  },
+
+
+  async getObservationProfile(
+    observationId: string,
+  ): Promise<ProfilePoint[]> {
+    return request<ProfilePoint[]>(
+      `/observations/${encodeURIComponent(observationId)}/profile`,
+    );
+  },
+
+
+  async getObservationStats(): Promise<Stats> {
+    return request<Stats>(
+      "/observations/stats/summary",
+    );
+  },
+
+
+  async getCurrents(
+    depth = 0,
+  ): Promise<CurrentVector[]> {
+    const params = new URLSearchParams({
+      depth: String(depth),
+    });
+
+    return request<CurrentVector[]>(
+      `/field/currents?${params.toString()}`,
+    );
+  },
+
+
+  async getProfile(
+    filters: ProfileFilters,
+  ): Promise<ProfilePoint[]> {
+    const params = new URLSearchParams({
+      latitude: String(filters.latitude),
+      longitude: String(filters.longitude),
+    });
+
+    return request<ProfilePoint[]>(
+      `/field/profile?${params.toString()}`,
+    );
+  },
+
+
+  async getField(
+    filters: FieldFilters = {},
+  ) {
+    const params = new URLSearchParams();
+
+    if (filters.variable) {
+      params.set("variable", filters.variable);
+    }
+
+    if (filters.depth !== undefined) {
+      params.set("depth", String(filters.depth));
+    }
+
+    const query = params.toString();
+
+    return request(
+      `/field/grid${query ? `?${query}` : ""}`,
+    );
+  },
+};
