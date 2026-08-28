@@ -4,7 +4,12 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException, Query, status
 from passlib.context import CryptContext
 
-from models.schemas import SavedView, Token, UserCreate
+from models.schemas import (
+    LoginRequest,
+    SavedView,
+    Token,
+    UserCreate,
+)
 
 
 router = APIRouter(
@@ -22,18 +27,19 @@ pwd_context = CryptContext(
 
 
 # ── Development-only storage ──────────────────────────────────────────────────
-# Replace this with PostgreSQL/SQLAlchemy before production deployment.
+# Replace with PostgreSQL/SQLAlchemy before production deployment.
 
 USERS: Dict[str, dict] = {}
 SAVED_VIEWS: Dict[str, List[SavedView]] = {}
 
 
-# ── Response helper ───────────────────────────────────────────────────────────
+# ── User response helper ──────────────────────────────────────────────────────
 
 def user_response(user: dict) -> dict:
     """
-    Return only public user information.
-    Never return the stored password hash.
+    Return public user information only.
+
+    Password hashes are never returned to the client.
     """
 
     return {
@@ -54,7 +60,7 @@ def register_user(payload: UserCreate):
     """
     Register a development user.
 
-    Passwords are hashed before being stored.
+    Passwords are securely hashed before storage.
     """
 
     email = payload.email.strip().lower()
@@ -82,16 +88,14 @@ def register_user(payload: UserCreate):
 
     user_id = str(uuid4())
 
-    password_hash = pwd_context.hash(
-        payload.password
-    )
-
     USERS[user_id] = {
         "id": user_id,
         "email": email,
         "name": payload.name.strip(),
         "organization": payload.organization,
-        "password_hash": password_hash,
+        "password_hash": pwd_context.hash(
+            payload.password
+        ),
     }
 
     SAVED_VIEWS[user_id] = []
@@ -107,14 +111,15 @@ def register_user(payload: UserCreate):
     "/login",
     response_model=Token,
 )
-def login_user(payload: UserCreate):
+def login_user(payload: LoginRequest):
     """
     Development login endpoint.
 
-    Passwords are verified against their stored bcrypt hash.
+    Verifies the supplied password against
+    the stored bcrypt password hash.
 
-    Production authentication should use a proper
-    JWT-based authentication flow.
+    Production authentication should use
+    signed JWT tokens.
     """
 
     email = payload.email.strip().lower()
@@ -134,10 +139,12 @@ def login_user(payload: UserCreate):
             detail="Invalid email or password",
         )
 
-    if not pwd_context.verify(
+    password_valid = pwd_context.verify(
         payload.password,
         user["password_hash"],
-    ):
+    )
+
+    if not password_valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
@@ -161,8 +168,7 @@ def get_current_user(
     Return a development user by ID.
 
     Production version should obtain the user
-    from a validated JWT instead of accepting
-    the user ID directly.
+    from a validated JWT.
     """
 
     user = USERS.get(user_id)
@@ -176,7 +182,7 @@ def get_current_user(
     return user_response(user)
 
 
-# ── Saved views ───────────────────────────────────────────────────────────────
+# ── List saved views ──────────────────────────────────────────────────────────
 
 @router.get(
     "/{user_id}/views",
@@ -224,7 +230,7 @@ def create_saved_view(
 
     view = payload.model_copy(
         update={
-            "view_id": str(uuid4())
+            "view_id": str(uuid4()),
         }
     )
 
