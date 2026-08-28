@@ -1,75 +1,156 @@
-"""
-/api/field     — 2D horizontal grid slice (drives the coloured ocean layer)
-/api/currents  — current vectors (drives arrows / streamlines)
-/api/profile   — vertical profile for one observation platform
-
-These three endpoints directly replace the mock functions in:
-  src/services/mockOceanService.ts
-"""
+from datetime import datetime, timezone
+from typing import List
 
 from fastapi import APIRouter, Query
-from typing import Literal, List
-from models.schemas import GridSlice, GridPoint, CurrentVector, ProfileResponse, ProfilePoint
 
-router = APIRouter()
-
-LAT_MIN, LAT_MAX, NLATS = -20, 30, 26
-LON_MIN, LON_MAX, NLONS =  40, 100, 31
+from models.schemas import CurrentVector, GridPoint, ProfilePoint
 
 
-@router.get("/field", response_model=GridSlice)
-def get_field_slice(
-    variable: Literal["temperature", "salinity", "chlorophyll"] = Query(...),
-    depth: float = Query(0.0, ge=0),
-    time: int   = Query(0, ge=0),
+router = APIRouter(prefix="/field", tags=["field"])
+
+
+@router.get("/grid", response_model=List[GridPoint])
+def get_field_grid(
+    variable: str = Query(
+        default="temperature",
+    ),
+    depth: float = Query(
+        default=0.0,
+        ge=0,
+    ),
 ):
     """
-    2D horizontal grid slice at the requested depth and time step.
-    Frontend calls: getFieldSlice(variable, depth, timeIndex)
-    Maps to: GET /api/field?variable=temperature&depth=200&time=3
+    Return a small demonstration ocean field.
 
-    TODO: replace with real xarray NetCDF read from INCOIS dataset
-        import xarray as xr
-        ds = xr.open_dataset("incois_model.nc")
-        da = ds[variable].isel(time=time).sel(depth=depth, method="nearest")
-        points = [GridPoint(lat=..., lon=..., depth=depth, ...) for ...]
+    The data adapter can later be replaced with
+    NetCDF/xarray/INCOIS data without changing the API.
     """
-    return GridSlice(nlats=NLATS, nlons=NLONS, points=[])
+
+    points = [
+        GridPoint(
+            lat=10.0,
+            lon=70.0,
+            depth=depth,
+            temperature=28.2,
+            salinity=34.9,
+            chlorophyll=0.42,
+        ),
+        GridPoint(
+            lat=12.0,
+            lon=72.0,
+            depth=depth,
+            temperature=27.8,
+            salinity=35.1,
+            chlorophyll=0.38,
+        ),
+        GridPoint(
+            lat=14.0,
+            lon=74.0,
+            depth=depth,
+            temperature=27.3,
+            salinity=35.3,
+            chlorophyll=0.31,
+        ),
+        GridPoint(
+            lat=16.0,
+            lon=76.0,
+            depth=depth,
+            temperature=26.9,
+            salinity=35.5,
+            chlorophyll=0.28,
+        ),
+    ]
+
+    return points
 
 
 @router.get("/currents", response_model=List[CurrentVector])
 def get_currents(
-    depth:   float = Query(0.0, ge=0),
-    time:    int   = Query(0, ge=0),
-    density: Literal["low", "medium", "high"] = Query("medium"),
+    depth: float = Query(
+        default=0.0,
+        ge=0,
+    ),
 ):
     """
-    Current vectors (u, v) for arrow rendering on the map.
-    Frontend calls: getCurrents(depth, timeIndex, density)
-    Maps to: GET /api/currents?depth=0&time=0&density=medium
-
-    TODO: replace with real INCOIS current data
-        step = {"low": 5, "medium": 3, "high": 2}[density]
-        ds = xr.open_dataset("incois_currents.nc")
-        ...
+    Return demonstration current vectors.
     """
-    return []
+
+    timestamp = datetime.now(timezone.utc)
+
+    return [
+        CurrentVector(
+            latitude=12.0,
+            longitude=72.0,
+            depth=depth,
+            u=0.42,
+            v=0.18,
+            timestamp=timestamp,
+        ),
+        CurrentVector(
+            latitude=14.0,
+            longitude=74.0,
+            depth=depth,
+            u=0.35,
+            v=0.22,
+            timestamp=timestamp,
+        ),
+        CurrentVector(
+            latitude=16.0,
+            longitude=76.0,
+            depth=depth,
+            u=0.28,
+            v=0.14,
+            timestamp=timestamp,
+        ),
+    ]
 
 
-@router.get("/profile", response_model=ProfileResponse)
+@router.get("/profile", response_model=List[ProfilePoint])
 def get_profile(
-    id:       str = Query(...),
-    variable: Literal["temperature", "salinity", "chlorophyll"] = Query(...),
+    latitude: float = Query(
+        ...,
+        ge=-90,
+        le=90,
+    ),
+    longitude: float = Query(
+        ...,
+        ge=-180,
+        le=180,
+    ),
 ):
     """
-    Vertical profile for one observation platform.
-    Returns observed data AND model output so the frontend can overlay them.
-    Frontend calls: getProfile(obsId, variable)
-    Maps to: GET /api/profile?id=ARGO-2901&variable=temperature
-
-    TODO: replace with real Argo NetCDF + model data
-        obs_points   = [ProfilePoint(depth=d, ...) for d in argo_data]
-        model_points = [ProfilePoint(depth=d, ...) for d in model_data]
-        return ProfileResponse(observation=obs_points, model=model_points)
+    Return a demonstration vertical ocean profile.
     """
-    return ProfileResponse(observation=[], model=[])
+
+    return [
+        ProfilePoint(
+            depth=0,
+            temperature=28.4,
+            salinity=34.8,
+            chlorophyll=0.50,
+        ),
+        ProfilePoint(
+            depth=50,
+            temperature=27.9,
+            salinity=35.0,
+            chlorophyll=0.44,
+        ),
+        ProfilePoint(
+            depth=100,
+            temperature=27.2,
+            salinity=35.2,
+            chlorophyll=0.35,
+        ),
+        ProfilePoint(
+            depth=200,
+            temperature=25.8,
+            salinity=35.5,
+            chlorophyll=0.24,
+        ),
+        ProfilePoint(
+            depth=500,
+            temperature=20.1,
+            salinity=35.7,
+            chlorophyll=0.10,
+        ),
+    ]
