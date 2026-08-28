@@ -1,76 +1,108 @@
-"""
-/api/models — Ocean model run catalogue and gridded slice endpoints
-"""
+from datetime import datetime, timezone
+from typing import List
 
-from fastapi import APIRouter, Query, HTTPException
-from typing import List, Optional
-from datetime import datetime
-from models.schemas import ModelName, OceanVariable
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
-router = APIRouter()
+from models.schemas import ModelName
 
 
-@router.get("/runs")
-def list_model_runs(
-    model_name: Optional[ModelName] = Query(None),
-    domain: Optional[str] = Query(None),
-    status: str = Query("available"),
-    limit: int = Query(50, le=200),
-):
+router = APIRouter(prefix="/models", tags=["models"])
+
+
+class ModelRun(BaseModel):
+    run_id: str
+    model: ModelName
+    timestamp: datetime
+    region: str
+    status: str
+    resolution_km: float = Field(..., gt=0)
+
+
+class ModelRunList(BaseModel):
+    runs: List[ModelRun]
+
+
+MODEL_RUNS: List[ModelRun] = [
+    ModelRun(
+        run_id="ROMS-2026-08-28-00",
+        model=ModelName.ROMS,
+        timestamp=datetime(
+            2026,
+            8,
+            28,
+            0,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        region="indian-ocean",
+        status="available",
+        resolution_km=5.0,
+    ),
+    ModelRun(
+        run_id="NEMO-2026-08-28-00",
+        model=ModelName.NEMO,
+        timestamp=datetime(
+            2026,
+            8,
+            28,
+            0,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        region="indian-ocean",
+        status="available",
+        resolution_km=10.0,
+    ),
+]
+
+
+# Keep /runs/latest BEFORE /runs/{run_id}
+# so "latest" is not interpreted as a run ID.
+
+@router.get("/runs/latest", response_model=ModelRun)
+def get_latest_run():
     """
-    List available model runs filtered by model name, domain, status.
-    TODO: query model catalogue DB
+    Return the most recent available model run.
     """
-    return []
+    if not MODEL_RUNS:
+        raise HTTPException(
+            status_code=404,
+            detail="No model runs available",
+        )
+
+    return max(
+        MODEL_RUNS,
+        key=lambda run: run.timestamp,
+    )
 
 
-@router.get("/runs/latest")
-def latest_runs():
-    """Most recent available run for each configured model."""
-    return {}
+@router.get("/runs", response_model=ModelRunList)
+def list_model_runs():
+    """
+    Return all available model runs.
+    """
+    return ModelRunList(runs=MODEL_RUNS)
 
 
-@router.get("/runs/{run_id}")
+@router.get("/runs/{run_id}", response_model=ModelRun)
 def get_model_run(run_id: str):
-    """Full metadata for one model run."""
-    raise HTTPException(status_code=404, detail="Model run not found")
-
-
-@router.get("/runs/{run_id}/profile")
-def get_model_profile(
-    run_id: str,
-    lat: float = Query(..., ge=-90, le=90),
-    lon: float = Query(..., ge=-180, le=180),
-    variable: OceanVariable = Query(...),
-    valid_time: Optional[datetime] = Query(None),
-):
     """
-    Vertical profile at a single lat/lon point from model output.
-    Useful for comparing model vs in-situ observations.
-    TODO: read from NetCDF using xarray
+    Return a model run by ID.
     """
-    raise HTTPException(status_code=404, detail="Model run not found")
+    run = next(
+        (
+            item
+            for item in MODEL_RUNS
+            if item.run_id == run_id
+        ),
+        None,
+    )
 
+    if run is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Model run '{run_id}' not found",
+        )
 
-@router.get("/runs/{run_id}/timeseries")
-def get_model_timeseries(
-    run_id: str,
-    lat: float = Query(...),
-    lon: float = Query(...),
-    depth_m: float = Query(0.0),
-    variable: OceanVariable = Query(...),
-):
-    """Time series of a variable at a fixed point across all forecast steps."""
-    raise HTTPException(status_code=404, detail="Model run not found")
-
-
-@router.get("/compare")
-def compare_models(
-    run_ids: List[str] = Query(...),
-    variable: OceanVariable = Query(...),
-    lat: float = Query(...),
-    lon: float = Query(...),
-    depth_m: float = Query(0.0),
-):
-    """Side-by-side profile values from multiple model runs at the same point."""
-    return {"point": {"lat": lat, "lon": lon, "depth_m": depth_m}, "runs": []}
+    return run
