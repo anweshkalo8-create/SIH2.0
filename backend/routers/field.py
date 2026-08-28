@@ -1,19 +1,33 @@
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Literal
 
 from fastapi import APIRouter, Query
 
-from models.schemas import CurrentVector, GridPoint, ProfilePoint
+from models.schemas import (
+    CurrentVector,
+    GridPoint,
+    ProfilePoint,
+)
 
 
-router = APIRouter(prefix="/field", tags=["field"])
+router = APIRouter(
+    prefix="/field",
+    tags=["field"],
+)
 
 
-@router.get("/grid", response_model=List[GridPoint])
+# ── Grid ──────────────────────────────────────────────────────────────────────
+
+@router.get(
+    "/grid",
+    response_model=List[GridPoint],
+)
 def get_field_grid(
-    variable: str = Query(
-        default="temperature",
-    ),
+    variable: Literal[
+        "temperature",
+        "salinity",
+        "chlorophyll",
+    ] = Query(default="temperature"),
     depth: float = Query(
         default=0.0,
         ge=0,
@@ -22,8 +36,10 @@ def get_field_grid(
     """
     Return a small demonstration ocean field.
 
-    The data adapter can later be replaced with
-    NetCDF/xarray/INCOIS data without changing the API.
+    This is placeholder data for the prototype.
+    The implementation can later be replaced by
+    NetCDF/xarray/INCOIS data without changing the
+    API response structure.
     """
 
     points = [
@@ -61,10 +77,20 @@ def get_field_grid(
         ),
     ]
 
+    # The response contains all supported variables,
+    # so the frontend can switch variables without
+    # requesting a different response structure.
+    _ = variable
+
     return points
 
 
-@router.get("/currents", response_model=List[CurrentVector])
+# ── Currents ──────────────────────────────────────────────────────────────────
+
+@router.get(
+    "/currents",
+    response_model=List[CurrentVector],
+)
 def get_currents(
     depth: float = Query(
         default=0.0,
@@ -72,10 +98,12 @@ def get_currents(
     ),
 ):
     """
-    Return demonstration current vectors.
+    Return demonstration ocean current vectors.
     """
 
-    timestamp = datetime.now(timezone.utc)
+    timestamp = datetime.now(
+        timezone.utc
+    ).isoformat()
 
     return [
         CurrentVector(
@@ -105,7 +133,12 @@ def get_currents(
     ]
 
 
-@router.get("/profile", response_model=List[ProfilePoint])
+# ── Profile ───────────────────────────────────────────────────────────────────
+
+@router.get(
+    "/profile",
+    response_model=List[ProfilePoint],
+)
 def get_profile(
     latitude: float = Query(
         ...,
@@ -120,7 +153,14 @@ def get_profile(
 ):
     """
     Return a demonstration vertical ocean profile.
+
+    Latitude and longitude are currently accepted
+    for API compatibility. The demonstration data
+    is not yet location-dependent.
     """
+
+    _ = latitude
+    _ = longitude
 
     return [
         ProfilePoint(
