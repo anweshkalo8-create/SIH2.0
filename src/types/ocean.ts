@@ -1,12 +1,36 @@
 // Core domain types for the OceanVision 3D platform.
-// These mirror the shape of fields returned by the future FastAPI / xarray
-// backend, so the mock service can be swapped for a real API with minimal churn.
+// These types mirror the FastAPI backend schemas.
 
-export type ObservationType = 'argo' | 'glider';
 
-export type OceanVariable = 'temperature' | 'salinity' | 'current' | 'chlorophyll';
+// ── Observation Types ─────────────────────────────────────────────────────────
 
-export type ColorPaletteId = 'thermal' | 'haline' | 'velocity' | 'chlorophyll' | 'viridis';
+export type ObservationType =
+  | 'argo'
+  | 'glider'
+  | 'buoy';
+
+
+// ── Ocean Variables ───────────────────────────────────────────────────────────
+
+export type OceanVariable =
+  | 'temperature'
+  | 'salinity'
+  | 'chlorophyll'
+  | 'current_u'
+  | 'current_v';
+
+
+// ── Color Palettes ────────────────────────────────────────────────────────────
+
+export type ColorPaletteId =
+  | 'thermal'
+  | 'haline'
+  | 'velocity'
+  | 'chlorophyll'
+  | 'viridis';
+
+
+// ── Ocean Grid ────────────────────────────────────────────────────────────────
 
 export interface OceanGrid {
   latMin: number;
@@ -17,6 +41,30 @@ export interface OceanGrid {
   nlons: number;
   depths: number[];
 }
+
+
+// ── Grid Point ────────────────────────────────────────────────────────────────
+
+export interface GridPoint {
+  lat: number;
+  lon: number;
+  depth: number;
+  temperature: number;
+  salinity: number;
+  chlorophyll: number;
+}
+
+
+// ── Grid Slice ────────────────────────────────────────────────────────────────
+
+export interface GridSlice {
+  nlats: number;
+  nlons: number;
+  points: GridPoint[];
+}
+
+
+// ── Ocean Observation ─────────────────────────────────────────────────────────
 
 export interface Observation {
   id: string;
@@ -31,6 +79,9 @@ export interface Observation {
   maxDepth: number;
 }
 
+
+// ── Current Vector ────────────────────────────────────────────────────────────
+
 export interface CurrentVector {
   latitude: number;
   longitude: number;
@@ -40,6 +91,9 @@ export interface CurrentVector {
   timestamp: string;
 }
 
+
+// ── Profile ───────────────────────────────────────────────────────────────────
+
 export interface ProfilePoint {
   depth: number;
   temperature: number;
@@ -47,11 +101,23 @@ export interface ProfilePoint {
   chlorophyll: number;
 }
 
+
+export interface ProfileResponse {
+  observation: ProfilePoint[];
+  model: ProfilePoint[];
+}
+
+
+// ── Time ──────────────────────────────────────────────────────────────────────
+
 export interface TimeStep {
   index: number;
   label: string;
   timestamp: string;
 }
+
+
+// ── Variable Configuration ───────────────────────────────────────────────────
 
 export interface VariableConfig {
   id: OceanVariable;
@@ -61,10 +127,16 @@ export interface VariableConfig {
   range: [number, number];
 }
 
+
+// ── Color Stops ───────────────────────────────────────────────────────────────
+
 export interface ColorStop {
   t: number;
   color: string;
 }
+
+
+// ── Statistics ────────────────────────────────────────────────────────────────
 
 export interface Stats {
   rmse: number;
@@ -72,14 +144,29 @@ export interface Stats {
   count: number;
 }
 
-export type RegionId = 'arabian-sea' | 'bay-of-bengal' | 'indian-ocean';
+
+// ── Regions ───────────────────────────────────────────────────────────────────
+
+export type RegionId =
+  | 'arabian-sea'
+  | 'bay-of-bengal'
+  | 'indian-ocean';
+
 
 export interface Region {
   id: RegionId;
   label: string;
   center: [number, number];
-  bounds: { latMin: number; latMax: number; lonMin: number; lonMax: number };
+  bounds: {
+    latMin: number;
+    latMax: number;
+    lonMin: number;
+    lonMax: number;
+  };
 }
+
+
+// ── Map Overlays ──────────────────────────────────────────────────────────────
 
 export interface OverlaysState {
   currents: boolean;
@@ -87,4 +174,3 @@ export interface OverlaysState {
   contours: boolean;
   bathymetry: boolean;
 }
-
