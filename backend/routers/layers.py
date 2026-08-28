@@ -5,8 +5,13 @@ from fastapi import APIRouter, HTTPException
 from models.schemas import LayerToggle, MapLayer
 
 
-router = APIRouter(prefix="/layers", tags=["layers"])
+router = APIRouter(
+    prefix="/layers",
+    tags=["layers"],
+)
 
+
+# ── Map layer definitions ─────────────────────────────────────────────────────
 
 LAYERS: List[MapLayer] = [
     MapLayer(
@@ -14,7 +19,7 @@ LAYERS: List[MapLayer] = [
         name="Bathymetry",
         description="Ocean depth and seabed information.",
         type="raster",
-        url="/layers/bathymetry",
+        url="/api/layers/bathymetry",
         attribution="OceanVision",
         default_visible=True,
         z_index=10,
@@ -24,7 +29,7 @@ LAYERS: List[MapLayer] = [
         name="Ocean Currents",
         description="Surface ocean current vectors.",
         type="vector",
-        url="/layers/currents",
+        url="/api/field/currents",
         attribution="OceanVision",
         default_visible=True,
         z_index=20,
@@ -42,13 +47,21 @@ LAYERS: List[MapLayer] = [
 ]
 
 
-@router.get("", response_model=List[MapLayer])
+# ── List layers ───────────────────────────────────────────────────────────────
+
+@router.get(
+    "",
+    response_model=List[MapLayer],
+)
 def list_layers():
     """
     Return all available map layers.
     """
+
     return LAYERS
 
+
+# ── EEZ boundaries ────────────────────────────────────────────────────────────
 
 @router.get("/eez_boundaries/geojson")
 def get_eez_boundaries():
@@ -58,42 +71,26 @@ def get_eez_boundaries():
     Boundary geometry will be connected to the official
     geographic dataset in the production data layer.
     """
+
     return {
         "type": "FeatureCollection",
         "features": [],
     }
 
 
-@router.get("/{layer_id}", response_model=MapLayer)
-def get_layer(layer_id: str):
-    """
-    Return one layer by ID.
-    """
-    layer = next(
-        (
-            item
-            for item in LAYERS
-            if item.layer_id == layer_id
-        ),
-        None,
-    )
-
-    if layer is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Layer '{layer_id}' not found",
-        )
-
-    return layer
-
+# ── Toggle layers ─────────────────────────────────────────────────────────────
 
 @router.post("/toggle")
-def toggle_layers(payload: LayerToggle):
+def toggle_layers(
+    payload: LayerToggle,
+):
     """
-    Return the requested visibility state.
+    Validate requested layer IDs and return
+    the requested visibility state.
 
     Persistent user preferences can be added later.
     """
+
     known_ids = {
         layer.layer_id
         for layer in LAYERS
@@ -118,3 +115,37 @@ def toggle_layers(payload: LayerToggle):
         "layer_ids": payload.layer_ids,
         "visible": payload.visible,
     }
+
+
+# ── Single layer ──────────────────────────────────────────────────────────────
+# Keep this dynamic route LAST so that paths such as
+# /eez_boundaries/geojson are handled by their
+# specific endpoint above.
+
+@router.get(
+    "/{layer_id}",
+    response_model=MapLayer,
+)
+def get_layer(
+    layer_id: str,
+):
+    """
+    Return one layer by ID.
+    """
+
+    layer = next(
+        (
+            item
+            for item in LAYERS
+            if item.layer_id == layer_id
+        ),
+        None,
+    )
+
+    if layer is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Layer '{layer_id}' not found",
+        )
+
+    return layer
