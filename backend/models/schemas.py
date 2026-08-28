@@ -153,6 +153,21 @@ class ExportRequest(BaseModel):
     format: Literal[
         "csv",
         "json",
-        "netcdf",
     ]
     variables: Optional[List[OceanVariable]] = None
+
+
+class ExportStatus(BaseModel):
+    job_id: str
+    status: Literal[
+        "queued",
+        "processing",
+        "completed",
+        "failed",
+    ]
+    progress_pct: int = Field(
+        ...,
+        ge=0,
+        le=100,
+    )
+    download_url: Optional[str] = None
