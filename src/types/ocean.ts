@@ -1,13 +1,12 @@
 // Core domain types for the OceanVision 3D platform.
-// These types mirror the FastAPI backend schemas.
+// These types are used by the prototype mock data service.
 
 
 // ── Observation Types ─────────────────────────────────────────────────────────
 
 export type ObservationType =
   | 'argo'
-  | 'glider'
-  | 'buoy';
+  | 'glider';
 
 
 // ── Ocean Variables ───────────────────────────────────────────────────────────
@@ -15,9 +14,8 @@ export type ObservationType =
 export type OceanVariable =
   | 'temperature'
   | 'salinity'
-  | 'chlorophyll'
-  | 'current_u'
-  | 'current_v';
+  | 'current'
+  | 'chlorophyll';
 
 
 // ── Color Palettes ────────────────────────────────────────────────────────────
@@ -101,7 +99,6 @@ export interface ProfilePoint {
   chlorophyll: number;
 }
 
-
 export interface ProfileResponse {
   observation: ProfilePoint[];
   model: ProfilePoint[];
@@ -151,7 +148,6 @@ export type RegionId =
   | 'arabian-sea'
   | 'bay-of-bengal'
   | 'indian-ocean';
-
 
 export interface Region {
   id: RegionId;
